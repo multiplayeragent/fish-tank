@@ -1,0 +1,23 @@
+{
+  "name": "Fish Tank",
+  "genre": "social",
+  "dim": "2D",
+  "mode": "Drop-in",
+  "players": "1–30",
+  "hook": "Design a fish. Share one tank with everyone.",
+  "how": "Pick your fish's shape, fins, pattern and colors, then swim with everyone else's. Drop food and race to it to grow, tap the glass to make everyone dart, decorate the tank with plants and castles, and chat in bubbles. The tank remembers your fish and your decorations.",
+  "controls": "Click or tap where to swim (or WASD), F to feed, T to tap the glass, Enter to chat; on a phone: tap to swim and use the buttons",
+  "uses": [
+    ["World memory", "Players' browsers keep a copy of the tank (decorations and the fish of people who visited), so it comes back after the room empties."],
+    ["Saves", "Your fish, its size and how hungry it is are kept for you between visits."],
+    ["Leaderboard", "Your fish's growth points, all time."],
+    ["Bots", "Bot fish, and the remembered fish of people who are away, keep the tank lively."],
+    ["Host-run rules", "The host's browser drops the food, decides who ate each pellet and places decorations; if it leaves, the next player takes over."],
+    ["Live sync", "Everyone sees every fish swim, every pellet sink and every chat bubble."]
+  ],
+  "ideas": [
+    "Add a shark that chases the fish every few minutes",
+    "Let fish wear little hats",
+    "Add a day and night light with glowing fish at night"
+  ]
+}

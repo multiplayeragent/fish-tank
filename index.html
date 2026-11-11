@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fish Tank</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #0d3a5c; }
+  body { font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #fff; user-select: none; -webkit-user-select: none; }
+  canvas#game { display: block; width: 100vw; height: 100vh; height: 100dvh; touch-action: none; cursor: pointer; }
+  .hud { position: fixed; pointer-events: none; text-shadow: 0 1px 3px #000b; }
+  #me { top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: min(230px, 55vw); }
+  #fishName { font-size: 19px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meter { height: 8px; margin-top: 4px; border-radius: 6px; background: #0005; overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; border-radius: 6px; transition: width .3s; }
+  #growBar i { background: #ffd23f; } #foodBar i { background: #ff8a65; }
+  #stats { font-size: 12px; font-weight: 700; margin-top: 3px; }
+  #saved { font-size: 12px; opacity: 0; transition: opacity .5s; } #saved.on { opacity: .85; }
+  #net { top: max(10px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); font-size: 12px; font-weight: 600; text-align: right; max-width: 40vw; }
+  #toast { top: 24%; left: 16px; right: 16px; text-align: center; font-size: 19px; font-weight: 800; opacity: 0; transition: opacity .35s; }
+  #toast.on { opacity: 1; }
+  #hint { left: 16px; right: 16px; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 120px); text-align: center; font-size: 15px; font-weight: 700; transition: opacity .8s; }
+  #dock { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(10px, env(safe-area-inset-bottom)); width: min(500px, calc(100vw - 20px)); display: grid; gap: 6px; }
+  #bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  #chat { display: flex; gap: 6px; }
+  #say { flex: 1; min-width: 0; height: 44px; border: 0; border-radius: 14px; padding: 0 14px; font: 500 16px system-ui, sans-serif; background: #ffffffe6; color: #1d2433; outline: none; }
+  button { min-height: 44px; border: 0; border-radius: 14px; background: #f2fbff; color: #12324a; font: 700 13px system-ui, sans-serif; box-shadow: 0 2px 6px #0004; cursor: pointer; touch-action: manipulation; }
+  #bar button { padding: 4px 2px; line-height: 1.1; } #bar button b { display: block; font-size: 19px; }
+  #bar button.on { background: #ffd23f; }
+  #decoBar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 6px; border-radius: 14px; background: #00000055; }
+  #decoBar button { padding: 2px; } #decoBar button.on { outline: 3px solid #ffd23f; }
+  #decoBar canvas { display: block; width: 40px; height: 40px; margin: 0 auto; }
+  .panel { position: fixed; inset: 0; display: grid; place-items: center; background: #06203599; }
+  .card { width: min(380px, calc(100vw - 32px)); max-height: 88vh; overflow: auto; box-sizing: border-box; padding: 16px; border-radius: 18px; background: #f2fbff; color: #12324a; text-align: center; box-shadow: 0 10px 30px #0006; }
+  .card h2 { margin: 0 0 4px; font-size: 22px; } .card p { margin: 4px 0; font-size: 14px; color: #3d6079; }
+  #preview { display: block; width: 100%; height: auto; border-radius: 12px; background: linear-gradient(#4fb3e8, #1d6fa3); }
+  .row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin: 6px 0; }
+  .row button { min-width: 44px; padding: 0 8px; box-shadow: none; background: #dceef8; } .row button.on { outline: 3px solid #ff8a3d; background: #fff1d6; }
+  .sw { width: 44px; min-width: 44px !important; padding: 0 !important; }
+  .card input { width: 100%; box-sizing: border-box; height: 44px; margin: 6px 0; border: 2px solid #c9e2f0; border-radius: 12px; padding: 0 12px; font: 700 17px system-ui, sans-serif; text-align: center; background: #fff; color: #12324a; }
+  .go { width: 100%; margin-top: 8px; background: #ff8a3d; color: #fff; box-shadow: none; font-size: 17px; min-height: 48px; }
+  .ghost { width: 100%; margin-top: 8px; background: #dceef8; box-shadow: none; }
+  .label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #5d7f96; margin-top: 8px; }
+  .card ol { text-align: left; margin: 12px 0; padding-left: 26px; font-size: 14px; min-height: 40px; } .card li span { float: right; }
+  [hidden] { display: none !important; }
+  .attract .hud, .attract #dock { display: none !important; }
+</style>
+<script src="https://cdn.multiplayeragent.com/sdk/mp.global.js"></script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div class="hud" id="me"><div id="fishName"></div><div class="meter" id="growBar"><i></i></div><div class="meter" id="foodBar"><i></i></div><div id="stats"></div><div id="saved">✓ Saved</div></div>
+<div class="hud" id="net">Connecting…</div>
+<div class="hud" id="toast"></div>
+<div class="hud" id="hint"></div>
+<div id="dock">
+  <div id="decoBar" hidden></div>
+  <div id="bar">
+    <button id="feedBtn"><b>🍤</b>Feed</button>
+    <button id="tapBtn"><b>👆</b>Tap glass</button>
+    <button id="decoBtn"><b>🏰</b>Decorate</button>
+    <button id="fishBtn"><b>🐟</b>My fish</button>
+    <button id="topBtn"><b>🏆</b>Top</button>
+  </div>
+  <div id="chat"><input id="say" maxlength="60" placeholder="Say something…" enterkeyhint="send" autocomplete="off"></div>
+</div>
+<div class="panel" id="maker" hidden><div class="card">
+  <h2>Design your fish</h2>
+  <canvas id="preview" width="320" height="170"></canvas>
+  <div class="label">Shape</div><div class="row" id="optShape"></div>
+  <div class="label">Fins</div><div class="row" id="optFin"></div>
+  <div class="label">Pattern</div><div class="row" id="optPat"></div>
+  <div class="label">Body</div><div class="row" id="optC1"></div>
+  <div class="label">Accent</div><div class="row" id="optC2"></div>
+  <input id="nameIn" maxlength="14" placeholder="Name your fish" aria-label="Your fish's name">
+  <button class="ghost" id="randomBtn">Surprise me</button>
+  <button class="go" id="makeGo">Into the tank!</button>
+</div></div>
+<div class="panel" id="topPanel" hidden><div class="card">
+  <h2>Biggest fish</h2><p>Growth points, all time</p><ol id="board"><li>Loading…</li></ol><p id="myXp"></p>
+  <button class="go" id="topClose">Back to the tank</button>
+</div></div>
+<script>
+/* ═══ FISH TANK · a Multiplayer Agent starter ════════════════════════════════════════
+ * One shared aquarium. Design a fish, feed it, watch it grow. Drop-in, 1–30 players; bot fish keep it lively.
+ *
+ * WHERE THINGS ARE (search for the "── " headers):
+ *   CONFIG ........ tank size, speeds, food, growth, decorations, bots
+ *   CONNECTION .... MP_CONNECT, joining, the offline room, who is host
+ *   WORLD MEMORY .. how the tank survives the room emptying (same code in every starter)
+ *   TANK (HOST) ... decorations, food, remembered fish and bot fish. Only the host writes these.
+ *   FISH LOOKS .... the parts a fish is made of, and drawing any fish
+ *   MY FISH ....... swimming, eating, growing, hunger, chat; your fish save
+ *   DRAW .......... camera, water, sand, light, decorations, food, fish, bubbles
+ *   HUD & PANELS .. meters, the fish maker, decorate bar, biggest fish
+ *   INPUT ......... tap/click to swim there, keyboard, buttons, chat
+ *
+ * HOW THE MULTIPLAYER WORKS (a relay room: no server code):
+ *   - Each player writes its OWN entity: `p` (where its fish is and which way it faces,
+ *     ~10 times a second), `look` (its fish: name, shape, fins, pattern, colors, size),
+ *     `say` (its last chat line, so people who join later still see it) and `hb` once a second.
+ *   - The HOST is the lowest sessionId among live players (heartbeat seen in the last 3s),
+ *     worked out every frame. Only the host writes the shared fields `tank` (decorations,
+ *     remembered fish, `rev`, and a version `v`), `food` (pellets sinking and who ate which)
+ *     and `bots` (the bot fish). A new host adopts all of it.
+ *   - Intents to the host: "feed" {x}, "eat" {i}, "deco" {k, x} and "undeco" {i}. The host
+ *     checks them and writes `food` / `tank`. You grow when you see your id next to the
+ *     pellet in food.got. "tap" is just an event: every fish near it darts away.
+ *   - Your fish is YOUR save (player.data namespace CONFIG.fishNs; localStorage offline).
+ *   - The tank outlives the room through WORLD MEMORY: decorations and the fish of people
+ *     who visited (they swim on as remembered fish when their owners are away).
+ *   - ?attract plays offline with bot fish only (the preview video is recorded from it).
+ *   - Leaderboard "fish-growth": your fish's growth points.
+ */
+
+// ── CONFIG ──────────────────────────────────────────────────────────────────────────
+const CONFIG = {
+  tankW: 1600, tankH: 900, // the tank, world px
+  sandY: 820,             // where the sand starts
+  surfaceY: 40,           // the water line
+  seats: 8,               // bot fish fill the tank up to this many fish
+  speed: 230,             // your fish's top speed, px/s (hungry fish swim slower)
+  fishLen: 46,            // a level-0 fish's length, px
+  sink: 70,               // food sinks this fast, px/s
+  foodRestMs: 15000,      // food lies on the sand this long before it dissolves
+  foodMax: 40,            // most pellets in the tank at once
+  feedEach: 4,            // pellets per FEED
+  feedGapMs: 2500,        // wait between your feeds
+  eatReach: 26,           // px (grows with your fish)
+  hungerMins: 4,          // full to starving in this many minutes
+  levels: [0, 4, 10, 18, 28, 40, 55, 72, 92, 115, 140], // growth points for each level
+  decoEach: 3,            // decorations one visitor can have in the tank
+  decoMax: 16,            // decorations in the tank at once
+  remember: 8,            // fish the tank remembers (people who visited)
+  botNotice: 230,         // bot fish only go for food below this depth (people get first go at the top)
+  board: "fish-growth",   // leaderboard name
+  saveNs: "fish-tank",    // world-memory save namespace
+  fishNs: "fish-tank-fish", // your fish's save namespace
+  saveEvery: 10000,       // ms between world-memory saves
+};
+const SHAPES = ["round", "long", "tall", "puffer"], FINS = ["small", "flowy", "spiky"], PATS = ["none", "stripes", "spots", "belly"];
+const COLORS = ["#ff8a3d", "#ffd23f", "#ff5d8f", "#4da6ff", "#52d273", "#c77dff", "#ff5a5a", "#3de0d0", "#f4f4f4", "#2b2f45"];
+const DECOR = { plant: "Plant", kelp: "Kelp", castle: "Castle", rock: "Rocks", chest: "Treasure", coral: "Coral" };
+const BOT_NAMES = ["Bubbles", "Finn", "Coral", "Nemo-ish", "Sushi", "Blue", "Goldie", "Squirt", "Pebble", "Ziggy"];
+const BOT_LINES = ["blub!", "🫧", "Food?", "Hi friend!", "Nice castle!", "So shiny ✨", "I love this tank", "Wheee!", "🐟💕", "zzz…"];
+
+// ── CONNECTION ──────────────────────────────────────────────────────────────────────
+// The builder fills these in for this game. Downloaded from GitHub? Put your own pk_ key here.
+const MP_CONNECT = {
+  key: 'pk_REPLACE_ME',
+  room: 'fish-tank',
+  endpoint: 'wss://live.multiplayeragent.com',
+  apiUrl: 'https://api.multiplayeragent.com',
+};
+const ATTRACT = new URLSearchParams(location.search).has("attract");
+
+/** Same shape as the SDK client, kept in this tab: offline play and ?attract. */
+function localRoom() {
+  const id = "local", state = { entities: { players: { [id]: {} } }, shared: {} }, subs = [];
+  let queued = false;
+  const emit = () => { if (!queued) { queued = true; queueMicrotask(() => { queued = false; subs.forEach((f) => f(state)); }); } };
+  const put = (o, k, v) => { if (typeof k === "object") Object.assign(o, k); else o[k] = v; emit(); };
+  return {
+    sessionId: id, state, offline: true,
+    me: { set: (k, v) => put(state.entities.players[id], k, v) },
+    setShared: (k, v) => put(state.shared, k, v),
+    onState: (f) => { subs.push(f); f(state); }, onJoin() {}, onLeave() {}, on() {}, send() {},
+    onDisconnect() {}, onReconnect() {}, leave: async () => {},
+  };
+}
+async function connect() {
+  if (ATTRACT || typeof MP === "undefined") return localRoom();
+  try {
+    const mp = await Promise.race([MP.join({ ...MP_CONNECT }), new Promise((_, no) => setTimeout(() => no(new Error("timed out")), 10000))]);
+    window.mp = mp; // the builder calls window.mp.leave() when the page closes
+    return mp;
+  } catch (e) {
+    console.warn("Playing offline:", e && e.message);
+    return localRoom();
+  }
+}
+const parse = (v, fallback) => { if (typeof v !== "string") return fallback; try { return JSON.parse(v); } catch { return fallback; } };
+const memo = new Map();
+/** A shared JSON field (or an entity's), parsed once per change (read-only: never mutate what this returns). */
+function field(key, raw, fallback) {
+  const m = memo.get(key);
+  if (m && m.raw === raw) return m.v;
+  const v = parse(raw, fallback); memo.set(key, { raw, v }); return v;
+}
+const shared = (key, fallback) => field("shared:" + key, S.shared[key], fallback);
+let net = null, player = null, board = null;
+let S = { entities: { players: {} }, shared: {} };
+const seenHb = new Map();
+/** Players whose heartbeat moved in the last 3s (plus us), sorted by sessionId. */
+function livePlayers() {
+  const now = performance.now(), out = [];
+  for (const [id, p] of Object.entries(S.entities.players || {})) {
+    const s = seenHb.get(id);
+    if (!s || s.hb !== p.hb) seenHb.set(id, { hb: p.hb, at: now });
+    if (id === net.sessionId || now - seenHb.get(id).at < 3000) out.push(id);
+  }
+  return out.sort();
+}
+let wakeHold = 0, lastFrameAt = 0; // a tab whose frames stopped (frozen, or in the background) doesn't act as host, nor for 700ms after it wakes (see frame())
+const isHost = () => livePlayers()[0] === net.sessionId && performance.now() >= wakeHold && !(lastFrameAt && performance.now() - lastFrameAt > 1000);
+
+// ── WORLD MEMORY ────────────────────────────────────────────────────────────────────
+// A relay room forgets everything when its last player leaves, so the PLAYERS remember the tank:
+//   1. Every CONFIG.saveEvery ms and when the page closes, each player saves a copy of the live
+//      tank with its `rev` (how many changes PEOPLE made; bots don't count) to its player save
+//      (player.data, namespace CONFIG.saveNs) and to this browser (localStorage). A copy with a
+//      higher rev than the live tank is never overwritten: it is kept and offered.
+//   2. The first player into an empty room becomes host and loads its copy into shared.
+//   3. A player who joins holding a copy with a HIGHER rev than the live tank offers it: it
+//      writes the copy into its own entity (`wmh` header, `wm0`, `wm1`… chunks under 2048
+//      characters) and the host adopts it. The copy with more changes in it wins.
+// The game supplies worldSnapshot(), liveRev() (-1 = no tank yet) and loadWorld(world, rev).
+const memory = { saved: null, ready: false, cloud: null, lastJson: "", lastSave: 0, offerRev: 0, offerN: 0 };
+const memoryKey = () => "mpa-world:" + MP_CONNECT.room + (net.offline ? ":offline" : "");
+async function loadMemory() {
+  let best = null;
+  try { best = JSON.parse(localStorage.getItem(memoryKey()) || "null"); } catch {}
+  if (player) {
+    try {
+      const doc = (await player.data.get(CONFIG.saveNs)).data;
+      if (doc && doc.room === MP_CONNECT.room && doc.world && (!best || doc.rev > best.rev)) best = doc;
+      memory.cloud = true;
+    } catch (e) { memory.cloud = false; console.warn("World memory: no cloud save, this browser only:", e && e.message); }
+  }
+  memory.saved = best && best.room === MP_CONNECT.room && best.world && typeof best.rev === "number" ? best : null;
+  memory.lastJson = memory.saved ? JSON.stringify(memory.saved.world) : "";
+  memory.ready = true;
+}
+function rememberWorld() {
+  if (ATTRACT || !memory.ready) return;
+  const rev = liveRev();
+  if (rev < 0 || (memory.saved && rev < memory.saved.rev)) return; // mine is newer: keep it, keep offering it
+  const doc = { room: MP_CONNECT.room, rev, at: Date.now(), world: worldSnapshot() };
+  const json = JSON.stringify(doc.world);
+  if (json === memory.lastJson) return;
+  memory.lastJson = json; memory.saved = doc;
+  try { localStorage.setItem(memoryKey(), JSON.stringify(doc)); } catch {}
+  if (player && memory.cloud) {
+    player.data.set(doc, { namespace: CONFIG.saveNs })
+      .catch((e) => e && e.current ? player.data.set(doc, { namespace: CONFIG.saveNs, version: e.current.version }) : Promise.reject(e))
+      .catch((e) => { if (e && (e.status === 401 || e.status === 403)) memory.cloud = false; });
+  }
+  flashSaved();
+}
+function offerMemory() {
+  if (ATTRACT || !memory.ready) return;
+  const mine = memory.saved, live = liveRev(), better = mine && mine.rev > live;
+  if (isHost()) {
+    if (memory.offerRev) clearOffer();
+    if (better && live >= 0 && loadWorld(mine.world, mine.rev)) memoryAdopted("");
+    return;
+  }
+  if (better && memory.offerRev !== mine.rev) {
+    const json = JSON.stringify(mine.world), fields = {}, n = Math.ceil(json.length / 1900);
+    if (n > 40) return;
+    for (let i = 0; i < n; i++) fields["wm" + i] = "~" + json.slice(i * 1900, (i + 1) * 1900); // "~" keeps it a string
+    net.me.set(fields);
+    net.me.set("wmh", JSON.stringify({ room: MP_CONNECT.room, rev: mine.rev, n })); // header last: chunks land first
+    memory.offerRev = mine.rev; memory.offerN = n;
+  } else if (!better && memory.offerRev) clearOffer();
+}
+function clearOffer() {
+  const fields = { wmh: "" };
+  for (let i = 0; i < memory.offerN; i++) fields["wm" + i] = "";
+  net.me.set(fields); memory.offerRev = 0; memory.offerN = 0;
+}
+function adoptOffers() {
+  let best = null;
+  for (const id of livePlayers()) {
+    const p = S.entities.players[id], h = id !== net.sessionId && parse(p && p.wmh, null);
+    if (!h || h.room !== MP_CONNECT.room || !(h.n <= 40) || !(h.rev > liveRev()) || (best && h.rev <= best.rev)) continue;
+    let json = "";
+    for (let i = 0; i < h.n && json !== null; i++) { const c = p["wm" + i]; json = typeof c === "string" && c[0] === "~" ? json + c.slice(1) : null; }
+    const world = parse(json, null);
+    if (world) best = { rev: h.rev, world, name: lookOf(id).n || "A player" };
+  }
+  if (best && loadWorld(best.world, best.rev)) memoryAdopted(best.name);
+}
+function memoryAdopted(name) {
+  const text = name ? `${name} brought back the tank they remembered` : "Welcome back: the tank remembers you";
+  toast(text); net.send("memory", { text: name ? text : "The host brought back the tank they remembered" });
+}
+function memoryTick() {
+  offerMemory();
+  if (isHost() && !ATTRACT) adoptOffers();
+  if (performance.now() - memory.lastSave > CONFIG.saveEvery) { memory.lastSave = performance.now(); rememberWorld(); }
+}
+addEventListener("pagehide", () => rememberWorld());
+document.addEventListener("visibilitychange", () => { if (document.hidden) rememberWorld(); });
+
+// ── TANK (HOST) ─────────────────────────────────────────────────────────────────────
+// tank = { v, rev, decor: [[id, kind, x, owner]], res: [{ u, n, l, sz }] }   (res = remembered fish)
+// food = { list: [[id, x, droppedAt]], got: [[id, eaterId]] }               (pellets sink from the top)
+const host = { tank: null, food: { list: [], got: [] }, bots: new Map(), adopted: false, dirtyT: false, dirtyF: false, lastT: 0, lastF: 0, lastB: 0, looksJson: "", nextId: 1, fedAt: new Map(), startedAt: 0 };
+const hosting = () => isHost() && host.adopted;
+const tank = () => (hosting() ? host.tank : shared("tank", null));
+const food = () => (hosting() ? host.food : shared("food", { list: [], got: [] }));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const TW = CONFIG.tankW, TH = CONFIG.tankH;
+const landsAt = (f) => f[2] + ((CONFIG.sandY - 8 - CONFIG.surfaceY) / CONFIG.sink) * 1000; // when a pellet reaches the sand
+/** Where a pellet is now: it sinks with a little sway, then rests on the sand. */
+function pelletPos(f, t = Date.now()) {
+  const s = Math.max(0, t - f[2]) / 1000, y = Math.min(CONFIG.sandY - 8, CONFIG.surfaceY + s * CONFIG.sink), sway = y < CONFIG.sandY - 8 ? Math.sin(s * 2 + f[0]) * 8 : Math.sin(f[0]) * 8;
+  return { x: f[1] + sway, y };
+}
+
+function defaultTank() {
+  return { v: 0, rev: 0, decor: [[1, "castle", 800, ""], [2, "plant", 330, ""], [3, "kelp", 1240, ""], [4, "rock", 560, ""], [5, "coral", 1050, ""]], res: [] };
+}
+function adoptTank() {
+  host.tank = parse(S.shared.tank, null);
+  host.food = { list: [], got: [], ...parse(S.shared.food, {}) };
+  host.bots.clear();
+  const looks = new Map(parse(S.shared.botLooks, []).map(([i, l]) => [i, l]));
+  for (const b of parse(S.shared.bots, [])) if (looks.get(b.i)) host.bots.set(b.i, newBot(b.i, looks.get(b.i), b.x, b.y));
+  host.nextId = 1 + Math.max(0, ...(host.tank?.decor || []).map((d) => d[0]), ...host.food.list.map((f) => f[0]));
+  host.adopted = !!host.tank;
+}
+function worldSnapshot() { const t = tank(); return t ? { decor: t.decor, res: t.res } : { decor: [], res: [] }; }
+function liveRev() { const t = tank(); return t && typeof t.rev === "number" ? t.rev : -1; }
+/** World memory: install a remembered tank (every part checked). */
+function loadWorld(w, rev) {
+  if (!w || !Array.isArray(w.decor) || typeof rev !== "number") return false;
+  const decor = w.decor.filter((d) => Array.isArray(d) && DECOR[d[1]] && Number.isFinite(d[2])).slice(-CONFIG.decoMax).map((d, i) => [i + 1, d[1], Math.max(40, Math.min(TW - 40, d[2])), ""]);
+  const res = (Array.isArray(w.res) ? w.res : []).filter((r) => r && r.u && cleanLook(r.l)).slice(-CONFIG.remember);
+  host.tank = { v: host.tank?.v || 0, rev, decor, res }; host.nextId = decor.length + 1; host.adopted = true; host.dirtyT = true;
+  for (const b of host.bots.values()) if (b.u) host.bots.delete(b.id); // remembered fish change: respawn them
+  return true;
+}
+/** One intent (from a player, or from the host itself). */
+function applyIntent(type, m, from) {
+  if (!m || !host.tank) return;
+  const t = Date.now();
+  if (type === "feed") {
+    if (t - (host.fedAt.get(from) || 0) < CONFIG.feedGapMs - 300) return; // too soon
+    host.fedAt.set(from, t);
+    const x = Math.max(40, Math.min(TW - 40, +m.x || TW / 2));
+    for (let k = 0; k < CONFIG.feedEach; k++) host.food.list.push([host.nextId++, Math.round(x + rnd(-40, 40)), t + k * 160]);
+    if (host.food.list.length > CONFIG.foodMax) host.food.list.splice(0, host.food.list.length - CONFIG.foodMax);
+    host.dirtyF = true;
+  } else if (type === "eat") {
+    const i = host.food.list.findIndex((f) => f[0] === m.i); if (i < 0) return;
+    const at = pelletPos(host.food.list[i], t), who = fishPosOf(from);
+    if (who && Math.hypot(who.x - at.x, who.y - at.y) > 140) return; // too far, even allowing for lag
+    host.food.list.splice(i, 1); host.food.got.push([m.i, from]); if (host.food.got.length > 12) host.food.got.shift();
+    host.dirtyF = true;
+  } else if (type === "deco") {
+    if (!DECOR[m.k]) return;
+    const x = Math.max(40, Math.min(TW - 40, Math.round(+m.x || TW / 2))), d = host.tank.decor;
+    const mine = d.filter((q) => q[3] === from);
+    if (mine.length >= CONFIG.decoEach) d.splice(d.indexOf(mine[0]), 1); // your oldest makes room
+    if (d.length >= CONFIG.decoMax) d.shift(); // the tank is full: the oldest goes
+    d.push([host.nextId++, m.k, x, from]);
+    if (from !== "bot") { host.tank.rev++; }
+    host.dirtyT = true;
+  } else if (type === "undeco") {
+    const d = host.tank.decor, i = d.findIndex((q) => q[0] === m.i && q[3] === from);
+    if (i >= 0) { d.splice(i, 1); host.tank.rev++; host.dirtyT = true; }
+  }
+}
+/** A fish's position for the host's checks: mine, a bot's, or a player's last published spot. */
+function fishPosOf(id) { if (id === net.sessionId) return me; const b = host.bots.get(id); if (b) return b; return parse(S.entities.players[id]?.p, null); }
+
+function hostTick(dt, now) {
+  if (!host.adopted) {
+    if (S.shared.tank !== undefined) adoptTank();
+    else if (memory.ready || now - host.startedAt > 3000 || ATTRACT) {
+      host.tank = defaultTank(); host.adopted = true; host.dirtyT = true; host.nextId = 10;
+      if (memory.saved && loadWorld(memory.saved.world, memory.saved.rev)) memoryAdopted("");
+      if (ATTRACT) attractSetup();
+    } else return; // first one here: wait a moment for my remembered tank
+  }
+  const t = Date.now();
+  // pellets dissolve after resting on the sand a while
+  const before = host.food.list.length;
+  host.food.list = host.food.list.filter((f) => t < landsAt(f) + CONFIG.foodRestMs);
+  if (host.food.list.length !== before) host.dirtyF = true;
+  rememberVisitors();
+  if (ATTRACT) attractTick(t);
+  botsTick(dt, t);
+  if (host.dirtyT && now - host.lastT > 300) { host.dirtyT = false; host.lastT = now; host.tank.v = Math.max(host.tank.v || 0, shared("tank", null)?.v || 0) + 1; net.setShared("tank", JSON.stringify(host.tank)); }
+  if (host.dirtyF && now - host.lastF > 120) { host.dirtyF = false; host.lastF = now; net.setShared("food", JSON.stringify(host.food)); }
+  if (now - host.lastB > 100) {
+    host.lastB = now;
+    net.setShared("bots", JSON.stringify([...host.bots.values()].map((b) => ({ i: b.id, x: Math.round(b.x), y: Math.round(b.y), f: b.f, s: b.sayUntil > t ? b.say : "" }))));
+    const looks = JSON.stringify([...host.bots.values()].map((b) => [b.id, b.look]));
+    if (looks !== host.looksJson) { host.looksJson = looks; net.setShared("botLooks", looks); }
+  }
+}
+/** The tank remembers the fish of people who visit (the newest CONFIG.remember of them). */
+function rememberVisitors() {
+  if (ATTRACT) return;
+  for (const id of livePlayers()) {
+    const l = lookOf(id); if (!l.u || !cleanLook(l)) continue;
+    const res = host.tank.res, old = res.find((r) => r.u === l.u), entry = { u: l.u, n: l.n, l: { s: l.s, fn: l.fn, pt: l.pt, c1: l.c1, c2: l.c2 }, sz: l.sz };
+    if (old && JSON.stringify(old) === JSON.stringify(entry)) continue;
+    if (old) res.splice(res.indexOf(old), 1); else host.tank.rev++; // a new visitor counts as a change
+    res.push(entry); if (res.length > CONFIG.remember) res.shift();
+    host.dirtyT = true;
+  }
+}
+// Bot fish: remembered fish (whose owners are away) first, then made-up ones, up to CONFIG.seats fish.
+function newBot(id, look, x, y) { return { id, look, u: look.u || "", x, y, vx: 0, vy: 0, f: 1, tx: x, ty: y, nextAt: 0, say: "", sayUntil: 0, sayAt: performance.now() + rnd(3000, 15000), dartUntil: 0 }; }
+function randomLook(name) { return { n: name, s: pick(SHAPES), fn: pick(FINS), pt: pick(PATS), c1: pick(COLORS.slice(0, 8)), c2: pick(COLORS), sz: Math.floor(rnd(0, 6)) }; }
+function botsTick(dt, t) {
+  const live = livePlayers(), humans = live.length - (ATTRACT ? 1 : 0), want = Math.max(0, CONFIG.seats - humans);
+  const here = new Set(live.map((id) => lookOf(id).u).filter(Boolean));
+  const away = (ATTRACT ? [] : host.tank.res).filter((r) => !here.has(r.u));
+  for (const b of host.bots.values()) if (b.u && here.has(b.u)) host.bots.delete(b.id); // its owner came back
+  while (host.bots.size < want) {
+    const r = away.find((q) => ![...host.bots.values()].some((b) => b.u === q.u));
+    const used = new Set([...host.bots.values()].map((b) => b.look.n));
+    const look = r ? { ...r.l, n: r.n, sz: r.sz, u: r.u } : randomLook(BOT_NAMES.find((n) => !used.has(n)) || "Fishy");
+    const id = "b" + Math.random().toString(36).slice(2, 6);
+    host.bots.set(id, newBot(id, look, rnd(100, TW - 100), rnd(150, CONFIG.sandY - 120)));
+  }
+  while (host.bots.size > want) { const [id] = [...host.bots.keys()].reverse(); host.bots.delete(id); }
+  const list = host.food.list;
+  for (const b of host.bots.values()) {
+    const len = fishLen(b.look.sz);
+    // food nearby? go for it. Otherwise wander between spots, sometimes near a decoration.
+    let target = null, bd = 380;
+    for (const f of list) { const p = pelletPos(f, t); const d = Math.hypot(p.x - b.x, p.y - b.y); if (d < bd && p.y > CONFIG.botNotice) { bd = d; target = p; } } // bots only notice food once it has sunk a little
+    if (target) { b.tx = target.x; b.ty = target.y; }
+    else if (t > b.nextAt || Math.hypot(b.tx - b.x, b.ty - b.y) < 20) {
+      b.nextAt = t + rnd(2500, 6000);
+      const d = host.tank.decor;
+      if (d.length && Math.random() < 0.35) { const q = pick(d); b.tx = q[2] + rnd(-90, 90); b.ty = CONFIG.sandY - rnd(60, 170); }
+      else { b.tx = rnd(80, TW - 80); b.ty = rnd(110, CONFIG.sandY - 60); }
+    }
+    swim(b, b.tx, b.ty, dt, t < b.dartUntil ? 2.2 : target ? 0.85 : 0.5);
+    for (let i = list.length - 1; i >= 0; i--) { const p = pelletPos(list[i], t); if (t >= list[i][2] && Math.hypot(p.x - b.x, p.y - b.y) < CONFIG.eatReach + len * 0.2) { host.food.got.push([list[i][0], b.id]); list.splice(i, 1); host.dirtyF = true; if (host.food.got.length > 12) host.food.got.shift(); } }
+    if (performance.now() > b.sayAt) { b.sayAt = performance.now() + rnd(9000, 22000); b.say = pick(BOT_LINES); b.sayUntil = t + 3500; }
+  }
+}
+/** Swim toward (tx, ty): ease the velocity, face where you're going, stay in the water. */
+function swim(f, tx, ty, dt, pace) {
+  const dx = tx - f.x, dy = ty - f.y, d = Math.hypot(dx, dy), top = CONFIG.speed * pace;
+  const want = d > 6 ? { x: (dx / d) * Math.min(top, d * 3), y: (dy / d) * Math.min(top, d * 3) } : { x: 0, y: 0 };
+  const k = 1 - Math.pow(0.02, dt);
+  f.vx += (want.x - f.vx) * k; f.vy += (want.y - f.vy) * k;
+  f.x = Math.max(30, Math.min(TW - 30, f.x + f.vx * dt)); f.y = Math.max(CONFIG.surfaceY + 30, Math.min(CONFIG.sandY - 22, f.y + f.vy * dt));
+  if (Math.abs(f.vx) > 12) f.f = f.vx > 0 ? 1 : -1;
+}
+/** A tap on the glass: fish near it dart away. */
+function startle(f, x, y, t) { const dx = f.x - x, dy = f.y - y, d = Math.hypot(dx, dy) || 1; if (d > 420) return false; f.tx = Math.max(60, Math.min(TW - 60, f.x + (dx / d) * 320)); f.ty = Math.max(100, Math.min(CONFIG.sandY - 40, f.y + (dy / d) * 220)); f.dartUntil = t + 700; f.nextAt = t + 1500; return true; }
+/** ?attract: food keeps falling and someone taps the glass now and then. */
+function attractTick(t) {
+  if (t > (host.feedAt || 0)) { host.feedAt = t + 2600; applyIntent("feed", { x: rnd(350, 1250) }, "attract"); }
+  if (t > (host.tapAt || t + 1)) { host.tapAt = t + 7000; tapGlass(rnd(500, 1100), rnd(250, 600)); }
+  if (!host.tapAt) host.tapAt = t + 4500;
+}
+/** ?attract: a busy tank with lots of decorations, fish and food already falling. */
+function attractSetup() {
+  const t = Date.now();
+  host.tank.decor = [[1, "castle", 800, ""], [2, "plant", 250, ""], [3, "kelp", 1300, ""], [4, "rock", 560, ""], [5, "coral", 1060, ""], [6, "chest", 420, ""], [7, "kelp", 120, ""], [8, "plant", 1480, ""], [9, "coral", 660, ""]];
+  for (let k = 0; k < 10; k++) host.food.list.push([host.nextId++, Math.round(rnd(300, 1300)), t - rnd(0, 6000)]);
+  host.dirtyF = true;
+}
+
+// ── FISH LOOKS ──────────────────────────────────────────────────────────────────────
+// A look: { n name, s shape, fn fins, pt pattern, c1 body color, c2 accent, sz level, u who owns it }
+const isColor = (c) => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c);
+function cleanLook(l) { return !!l && SHAPES.includes(l.s) && FINS.includes(l.fn) && PATS.includes(l.pt) && isColor(l.c1) && isColor(l.c2); }
+const lookOf = (id) => field("look:" + id, S.entities.players[id]?.look, {});
+const levelOf = (xp) => { let lv = 0; CONFIG.levels.forEach((need, i) => { if (xp >= need) lv = i; }); return lv; };
+const fishLen = (sz) => CONFIG.fishLen * (1 + Math.min(10, Math.max(0, sz || 0)) * 0.12);
+/** Draw any fish at (x, y), length len, facing f (1 right, -1 left). wag = tail swing. */
+function drawFish(c, look, x, y, len, f, wag, alpha = 1) {
+  const L = len / 2, Hh = look.s === "long" ? L * 0.42 : look.s === "tall" ? L * 0.95 : look.s === "puffer" ? L * 0.8 : L * 0.66;
+  c.save(); c.translate(x, y); c.scale(f, 1); c.globalAlpha = alpha;
+  c.rotate(Math.sin(wag) * 0.04);
+  // tail
+  const tw = Math.sin(wag * 1.6) * L * 0.25;
+  c.fillStyle = look.c2; c.beginPath(); c.moveTo(-L * 0.85, 0);
+  if (look.fn === "flowy") { c.quadraticCurveTo(-L * 1.5, -Hh * 1.1 + tw, -L * 1.75, -Hh * 0.9 + tw); c.quadraticCurveTo(-L * 1.35, tw, -L * 1.75, Hh * 0.9 + tw); c.quadraticCurveTo(-L * 1.5, Hh * 1.1 + tw, -L * 0.85, 0); }
+  else { c.lineTo(-L * 1.45, -Hh * 0.75 + tw); c.lineTo(-L * 1.3, tw); c.lineTo(-L * 1.45, Hh * 0.75 + tw); }
+  c.closePath(); c.fill();
+  // top fin
+  c.fillStyle = look.c2; c.beginPath();
+  if (look.fn === "spiky") { c.moveTo(-L * 0.5, -Hh * 0.8); for (let k = 0; k < 4; k++) { c.lineTo(-L * 0.4 + k * L * 0.22, -Hh * 1.45); c.lineTo(-L * 0.3 + k * L * 0.22, -Hh * 0.85); } c.lineTo(L * 0.4, -Hh * 0.7); }
+  else if (look.fn === "flowy") { c.moveTo(-L * 0.5, -Hh * 0.8); c.quadraticCurveTo(-L * 0.6 + tw * 0.4, -Hh * 2.0, L * 0.25, -Hh * 0.8); }
+  else { c.moveTo(-L * 0.35, -Hh * 0.85); c.quadraticCurveTo(-L * 0.1, -Hh * 1.35, L * 0.2, -Hh * 0.85); }
+  c.closePath(); c.fill();
+  // body
+  c.fillStyle = look.c1; c.beginPath();
+  if (look.s === "tall") { c.moveTo(L, 0); c.quadraticCurveTo(L * 0.4, -Hh * 1.05, -L * 0.85, 0); c.quadraticCurveTo(L * 0.4, Hh * 1.05, L, 0); }
+  else c.ellipse(0, 0, L, Hh, 0, 0, Math.PI * 2);
+  c.fill();
+  c.save(); c.clip();
+  c.fillStyle = look.c2;
+  if (look.pt === "stripes") for (let k = -1; k <= 1; k++) { c.globalAlpha = alpha * 0.9; c.fillRect(k * L * 0.42 - L * 0.08, -Hh * 1.2, L * 0.16, Hh * 2.4); }
+  else if (look.pt === "spots") for (const [sx, sy, r] of [[-0.4, -0.3, 0.13], [0.05, 0.25, 0.11], [0.35, -0.25, 0.09], [-0.15, 0.05, 0.1], [-0.55, 0.3, 0.08]]) { c.beginPath(); c.arc(sx * L, sy * Hh * 1.4, r * L, 0, Math.PI * 2); c.fill(); }
+  else if (look.pt === "belly") { c.globalAlpha = alpha * 0.85; c.beginPath(); c.ellipse(0, Hh * 0.75, L * 1.1, Hh * 0.6, 0, 0, Math.PI * 2); c.fill(); }
+  c.restore(); c.globalAlpha = alpha;
+  c.strokeStyle = "#0003"; c.lineWidth = Math.max(1, L * 0.05); c.beginPath();
+  if (look.s === "tall") { c.moveTo(L, 0); c.quadraticCurveTo(L * 0.4, -Hh * 1.05, -L * 0.85, 0); c.quadraticCurveTo(L * 0.4, Hh * 1.05, L, 0); } else c.ellipse(0, 0, L, Hh, 0, 0, Math.PI * 2);
+  c.stroke();
+  if (look.s === "puffer") { c.strokeStyle = look.c2; c.lineWidth = Math.max(1.5, L * 0.06); for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2; c.beginPath(); c.moveTo(Math.cos(a) * L * 0.95, Math.sin(a) * Hh * 0.95); c.lineTo(Math.cos(a) * L * 1.15, Math.sin(a) * Hh * 1.17); c.stroke(); } }
+  // side fin
+  c.fillStyle = look.c2; c.globalAlpha = alpha * 0.85; c.beginPath(); c.ellipse(-L * 0.05, Hh * 0.25, L * 0.24, Hh * 0.16, 0.6 + Math.sin(wag * 1.3) * 0.3, 0, Math.PI * 2); c.fill(); c.globalAlpha = alpha;
+  // eye and smile
+  c.fillStyle = "#fff"; c.beginPath(); c.arc(L * 0.55, -Hh * 0.2, Math.max(2.5, L * 0.17), 0, Math.PI * 2); c.fill();
+  c.fillStyle = "#16202e"; c.beginPath(); c.arc(L * 0.6, -Hh * 0.2, Math.max(1.5, L * 0.09), 0, Math.PI * 2); c.fill();
+  c.strokeStyle = "#16202e88"; c.lineWidth = Math.max(1, L * 0.04); c.beginPath(); c.arc(L * 0.72, Hh * 0.18, L * 0.12, 0.2, 1.4); c.stroke();
+  c.restore();
+}
+
+// ── MY FISH ─────────────────────────────────────────────────────────────────────────
+const me = { x: TW / 2, y: 400, vx: 0, vy: 0, f: 1, tx: TW / 2, ty: 400, keyMove: false, lastSend: 0, sent: "", dartUntil: 0, nextAt: 0, sayK: 0, lastSay: 0, eaten: new Set(), counted: new Set(), fedAt: -1e9, deco: "" };
+let save = { v: 1, look: null, xp: 0, fedAt: 0, hunger: 70, u: "" }, saveDirty = false;
+const hasFish = () => !!save.look;
+const local = { get: () => { try { return parse(localStorage.getItem("fish-tank.save"), null); } catch { return null; } }, set: (v) => { try { localStorage.setItem("fish-tank.save", JSON.stringify(v)); } catch {} } };
+function applySave(s) {
+  if (!s || !cleanLook(s.look)) return false;
+  save = { ...save, ...s, look: { ...s.look, n: String(s.look.n || "Fishy").slice(0, 14) }, xp: Math.max(0, Number(s.xp) || 0), hunger: Math.max(0, Math.min(100, Number(s.hunger) || 50)), u: s.u || save.u };
+  // hunger kept dropping while you were away (but never below a quarter: it's a gentle game)
+  save.hunger = Math.max(Math.min(save.hunger, 25), save.hunger - ((Date.now() - (s.at || Date.now())) / 60000) * (100 / CONFIG.hungerMins) * 0.1);
+  publishLook(); $("maker").hidden = true;
+  return true;
+}
+async function saveNow() {
+  if (ATTRACT || !hasFish()) return;
+  save.at = Date.now(); local.set(save); saveDirty = false; flashSaved();
+  if (!player) return;
+  try { await player.data.set(save, { namespace: CONFIG.fishNs }); }
+  catch (e) { if (e && e.current) player.data.set(save, { namespace: CONFIG.fishNs, version: e.current.version }).catch(() => {}); } // another device saved in between: ours is newer
+}
+async function loadAccountSave() { try { const r = await player.data.get(CONFIG.fishNs); return r && r.data && r.data.v ? r.data : null; } catch { return null; } }
+function publishLook() { if (net && save.look) net.me.set("look", JSON.stringify({ ...save.look, sz: levelOf(save.xp), u: save.u, o: myName })); }
+const myName = (() => { try { return localStorage.getItem("mpa-name") || ""; } catch { return ""; } })() ||
+  ["Sunny", "Bubbly", "Lucky", "Happy", "Splashy", "Sparkly"][Math.floor(Math.random() * 6)] + " " + ["Diver", "Swimmer", "Keeper", "Snorkeler", "Sailor"][Math.floor(Math.random() * 5)];
+/** Every fish in the room but mine (players and bots). */
+const otherLooks = () => [...livePlayers().filter((id) => id !== net.sessionId).map((id) => ({ id, l: lookOf(id) })), ...(hosting() ? [...host.bots.values()].map((b) => ({ id: b.id, l: b.look })) : botView().map((b) => ({ id: b.id, l: b.look })))];
+/** Two fish that look exactly alike (same shape and colors): the one with the higher sessionId takes a free accent color. Bots always win. */
+function fixColor() {
+  if (!save.look) return;
+  const same = otherLooks().some((o) => o.l.c1 === save.look.c1 && o.l.c2 === save.look.c2 && o.l.s === save.look.s && (host.bots.has(o.id) || botView().some((b) => b.id === o.id) || o.id < net.sessionId));
+  if (!same) return;
+  const used = new Set(otherLooks().filter((o) => o.l.c1 === save.look.c1).map((o) => o.l.c2)), free = COLORS.find((c) => c !== save.look.c1 && !used.has(c));
+  if (free) { save.look.c2 = free; saveDirty = true; publishLook(); }
+}
+function grow(n) {
+  const before = levelOf(save.xp); save.xp += n; saveDirty = true;
+  const after = levelOf(save.xp);
+  floats.push({ x: me.x, y: me.y - 30, t0: performance.now(), text: `+${n}` });
+  if (after > before) { toast(`🎉 ${save.look.n} grew to size ${after}!`); publishLook(); sfx(880, 0.25); sparkle(me.x, me.y, 16); submitScore(true); }
+}
+let lastSubmit = 0;
+function submitScore(force) { if (board && save.xp && (force || performance.now() - lastSubmit > 20000)) { lastSubmit = performance.now(); board.submit(save.xp).catch(() => {}); } }
+/** My fish: swim to where I tapped (or keys), eat pellets I touch, get hungry slowly. */
+function myTick(dt, t) {
+  if (!hasFish()) return;
+  const len = fishLen(levelOf(save.xp)), hungry = save.hunger < 25;
+  if (ATTRACT) { // the preview: chase food, else wander
+    let best = null, bd = 1e9;
+    for (const f of food().list) { if (t < f[2]) continue; const p = pelletPos(f, t), d = Math.hypot(p.x - me.x, p.y - me.y); if (d < bd) { bd = d; best = p; } }
+    if (best) { me.tx = best.x; me.ty = best.y; } else if (t > me.nextAt) { me.nextAt = t + 3000; me.tx = rnd(200, TW - 200); me.ty = rnd(150, 700); }
+  }
+  swim(me, me.tx, me.ty, dt, (t < me.dartUntil ? 2.2 : 1) * (hungry ? 0.7 : 1));
+  for (const f of food().list) {
+    if (me.eaten.has(f[0]) || t < f[2]) continue;
+    const p = pelletPos(f, t);
+    if (Math.hypot(p.x - me.x - me.f * len * 0.35, p.y - me.y) < CONFIG.eatReach + len * 0.15) {
+      me.eaten.add(f[0]); sfx(660, 0.06); bubbles(p.x, p.y, 3);
+      if (isHost()) applyIntent("eat", { i: f[0] }, net.sessionId); else net.send("eat", { i: f[0] });
+    }
+  }
+  // growth: count pellets the host says I ate
+  for (const [i, who] of food().got) if (who === net.sessionId && !me.counted.has(i)) { me.counted.add(i); save.hunger = Math.min(100, save.hunger + 12); grow(save.hunger < 40 ? 2 : 1); }
+  save.hunger = Math.max(0, save.hunger - dt * (100 / (CONFIG.hungerMins * 60)));
+  const p = JSON.stringify({ x: Math.round(me.x), y: Math.round(me.y), f: me.f }), now = performance.now();
+  if (p !== me.sent && now - me.lastSend > 100) { me.sent = p; me.lastSend = now; net.me.set("p", p); }
+}
+function feed() {
+  if (!hasFish()) return;
+  const now = performance.now();
+  if (now - me.fedAt < CONFIG.feedGapMs) { toast("Let them finish first"); return; }
+  me.fedAt = now; sfx(520, 0.12);
+  const msg = { x: Math.round(me.x + rnd(-60, 60)) };
+  if (isHost()) applyIntent("feed", msg, net.sessionId); else net.send("feed", msg);
+  if (save.hunger < 60) toast("Swim up to the food to eat it");
+}
+function tapGlass(x, y) {
+  const t = Date.now(), m = { x: Math.round(x), y: Math.round(y) };
+  net.send("tap", m); onTap(m);
+}
+/** Everyone shows the ripple; my fish darts, and the host's bots dart. */
+function onTap(m) {
+  ripples.push({ x: m.x, y: m.y, t0: performance.now() }); sfx(140, 0.15);
+  const t = Date.now();
+  if (hasFish()) startle(me, m.x, m.y, t);
+  if (hosting()) for (const b of host.bots.values()) startle(b, m.x, m.y, t);
+}
+function sendChat() {
+  const input = $("say"), text = input.value.trim().slice(0, 60), now = performance.now();
+  input.value = "";
+  if (!text || now - me.lastSay < 900 || !hasFish()) return;
+  me.lastSay = now; me.sayK++;
+  net.send("chat", { t: text, k: me.sayK }); net.me.set("say", JSON.stringify({ t: text, k: me.sayK }));
+  heard.set(net.sessionId, me.sayK); said.set(net.sessionId, { text, until: performance.now() + 6000 });
+}
+
+// ── DRAW ────────────────────────────────────────────────────────────────────────────
+const cv = document.getElementById("game"), ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+function fit() { DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; }
+addEventListener("resize", fit); addEventListener("orientationchange", fit); fit();
+const cam = { x: TW / 2, y: TH / 2, z: 1, cy: 300 }; // cy: the screen row the camera centre sits on (above the buttons)
+const said = new Map(), heard = new Map(), floats = [], ripples = [], bubs = [], shown = new Map();
+/** Fit the tank's height (a wide screen sees all of it); on a narrow screen follow my fish sideways. */
+function placeCamera(dt) {
+  const room = H - (ATTRACT ? 0 : 118); // keep the tank above the buttons
+  cam.z = W < H ? room / (TH + 40) : Math.min(W / TW, room / TH) * (ATTRACT ? 1.06 : 1); // a tall phone sees a slice of the tank (full height) and follows its fish
+  cam.cy = room / 2;
+  const viewW = W / cam.z, viewH = room / cam.z, k = 1 - Math.pow(0.05, dt);
+  const fx = ATTRACT ? TW / 2 : me.x, fy = ATTRACT ? TH : me.y; // the preview shows the whole tank down to the sand
+  const tx = viewW >= TW ? TW / 2 : Math.max(viewW / 2, Math.min(TW - viewW / 2, fx)), ty = viewH >= TH ? TH / 2 : Math.max(viewH / 2, Math.min(TH - viewH / 2, fy));
+  cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
+}
+/** Screen pixel -> tank point, through the camera this frame is drawn with. */
+const toTank = (sx, sy) => ({ x: (sx - W / 2) / cam.z + cam.x, y: (sy - cam.cy) / cam.z + cam.y });
+const toScreen = (x, y) => [(x - cam.x) * cam.z + W / 2, (y - cam.y) * cam.z + cam.cy];
+const tankImg = paintTank();
+/** The water, light and sand, drawn once. */
+function paintTank() {
+  const c = document.createElement("canvas"); c.width = TW / 2; c.height = TH / 2; const g = c.getContext("2d");
+  const water = g.createLinearGradient(0, 0, 0, TH / 2); water.addColorStop(0, "#5cc6f2"); water.addColorStop(0.55, "#2386c2"); water.addColorStop(1, "#11507e");
+  g.fillStyle = water; g.fillRect(0, 0, TW / 2, TH / 2);
+  g.fillStyle = "#ffffff18"; for (let k = 0; k < 6; k++) { const x = 80 + k * 135; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 50, 0); g.lineTo(x - 40, TH / 2); g.lineTo(x - 110, TH / 2); g.fill(); }
+  const sand = g.createLinearGradient(0, CONFIG.sandY / 2 - 20, 0, TH / 2); sand.addColorStop(0, "#f1d9a2"); sand.addColorStop(1, "#c9a66b");
+  g.fillStyle = sand; g.beginPath(); g.moveTo(0, TH / 2);
+  for (let x = 0; x <= TW / 2; x += 20) g.lineTo(x, CONFIG.sandY / 2 + Math.sin(x / 40) * 4 + Math.sin(x / 13) * 1.5);
+  g.lineTo(TW / 2, TH / 2); g.fill();
+  for (let k = 0; k < 140; k++) { g.fillStyle = k % 3 ? "#d9bb80" : "#fff2cf"; g.fillRect(Math.random() * TW / 2, CONFIG.sandY / 2 + 8 + Math.random() * 30, 2, 2); }
+  return c;
+}
+function draw(now, dt) {
+  const t = Date.now();
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = "#0d3a5c"; ctx.fillRect(0, 0, W, H);
+  ctx.setTransform(DPR * cam.z, 0, 0, DPR * cam.z, DPR * (W / 2 - cam.x * cam.z), DPR * (cam.cy - cam.y * cam.z));
+  ctx.drawImage(tankImg, 0, 0, TW, TH);
+  // the water line shimmer
+  ctx.fillStyle = "#ffffff30"; ctx.beginPath(); ctx.moveTo(0, 0);
+  for (let x = 0; x <= TW; x += 40) ctx.lineTo(x, CONFIG.surfaceY + Math.sin(x / 70 + now / 600) * 5);
+  ctx.lineTo(TW, 0); ctx.fill();
+  const tk = tank();
+  if (tk) for (const d of tk.decor) drawDecor(ctx, d[1], d[2], CONFIG.sandY + 6, now, d[3] === net.sessionId && me.deco);
+  // food
+  for (const f of food().list) { if (t < f[2] || me.eaten.has(f[0])) continue; const p = pelletPos(f, t); ctx.fillStyle = "#c2683a"; ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#ffb070"; ctx.beginPath(); ctx.arc(p.x - 1.5, p.y - 1.5, 2, 0, Math.PI * 2); ctx.fill(); }
+  // fish: bots, other players (eased), me on top
+  const fishes = [];
+  const botsNow = hosting() ? [...host.bots.values()].map((b) => ({ id: b.id, x: b.x, y: b.y, f: b.f, look: b.look, s: b.sayUntil > t ? b.say : "", mem: !!b.u })) : botView();
+  for (const b of botsNow) fishes.push({ ...b, ...(hosting() ? {} : ease(b.id, b.x, b.y, b.f, dt)), bot: true });
+  for (const id of livePlayers()) {
+    if (id === net.sessionId) continue;
+    const p = field("p:" + id, S.entities.players[id]?.p, null), l = lookOf(id);
+    if (p && cleanLook(l)) fishes.push({ id, look: l, ...ease(id, p.x, p.y, p.f, dt) });
+  }
+  if (hasFish()) fishes.push({ id: net.sessionId, x: me.x, y: me.y, f: me.f, look: { ...save.look, sz: levelOf(save.xp) }, mine: true });
+  for (const [id] of shown) if (!fishes.some((q) => q.id === id)) shown.delete(id);
+  for (const q of fishes) { const len = fishLen(q.look.sz); drawFish(ctx, q.look, q.x, q.y + Math.sin(now / 500 + q.x) * 3, len, q.f, now / 160 + q.x * 0.01); if (Math.random() < 0.006) bubbles(q.x + q.f * len * 0.5, q.y - 4, 1); }
+  // bubbles, ripples, sparkles
+  if (Math.random() < 0.08) bubbles(rnd(0, TW), CONFIG.sandY, 1);
+  for (let i = bubs.length - 1; i >= 0; i--) { const b = bubs[i]; b.y -= b.v * dt; b.x += Math.sin(b.y / 30 + b.s) * 0.4; if (b.y < CONFIG.surfaceY || b.life-- <= 0) { bubs.splice(i, 1); continue; } ctx.strokeStyle = b.color || "#ffffffaa"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.stroke(); }
+  for (let i = ripples.length - 1; i >= 0; i--) { const r = ripples[i], k = (now - r.t0) / 900; if (k > 1) { ripples.splice(i, 1); continue; } ctx.strokeStyle = `rgba(255,255,255,${1 - k})`; ctx.lineWidth = 4; for (const s of [1, 0.6]) { ctx.beginPath(); ctx.arc(r.x, r.y, 30 + k * 260 * s, 0, Math.PI * 2); ctx.stroke(); } }
+  if (me.deco && hoverX !== null) drawDecor(ctx, me.deco, hoverX, CONFIG.sandY + 6, now, false, 0.5);
+  // names and chat bubbles, in screen pixels
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.textAlign = "center";
+  for (const q of fishes) {
+    const len = fishLen(q.look.sz), [sx, fy] = toScreen(q.x, q.y), sy = fy - len * 0.55 * cam.z - 10;
+    if (!ATTRACT) { const tag = (q.look.n || "Fish") + (q.look.o && !q.mine && !q.bot ? ` · ${q.look.o}` : ""); ctx.font = "700 12px system-ui, sans-serif"; ctx.lineWidth = 3; ctx.strokeStyle = "#0009"; ctx.strokeText(tag, sx, sy); ctx.fillStyle = q.mine ? "#ffd23f" : q.mem ? "#cfe9ff" : "#fff"; ctx.fillText(tag, sx, sy); }
+    const s = q.bot ? q.s : said.get(q.id) && said.get(q.id).until > performance.now() ? said.get(q.id).text : "";
+    if (s) { ctx.font = "600 14px system-ui, sans-serif"; const w = Math.min(220, ctx.measureText(s).width + 18), y = sy - 40; ctx.fillStyle = "#fff"; roundRect(sx - w / 2, y, w, 24, 12); ctx.fill(); ctx.beginPath(); ctx.moveTo(sx - 5, y + 23); ctx.lineTo(sx + 5, y + 23); ctx.lineTo(sx, y + 30); ctx.fill(); ctx.fillStyle = "#12324a"; ctx.fillText(s, sx, y + 17, 204); }
+  }
+  for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i], k = (now - f.t0) / 1000; if (k > 1) { floats.splice(i, 1); continue; } const [sx, fy] = toScreen(f.x, f.y), sy = fy - k * 30; ctx.globalAlpha = 1 - k; ctx.font = "900 18px system-ui, sans-serif"; ctx.fillStyle = "#ffd23f"; ctx.fillText(f.text, sx, sy); ctx.globalAlpha = 1; }
+}
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+const botView = () => { const looks = new Map(shared("botLooks", []).map(([i, l]) => [i, l])); return shared("bots", []).filter((b) => cleanLook(looks.get(b.i))).map((b) => ({ id: b.i, x: b.x, y: b.y, f: b.f, look: looks.get(b.i), s: b.s, mem: !!looks.get(b.i).u })); };
+/** Other fish glide toward their last known spot (no 10-a-second stepping). */
+function ease(id, x, y, f, dt) {
+  let v = shown.get(id); if (!v) { v = { x, y, f }; shown.set(id, v); }
+  const k = 1 - Math.pow(0.002, dt); v.x += (x - v.x) * k; v.y += (y - v.y) * k; v.f = f || v.f;
+  return { x: v.x, y: v.y, f: v.f };
+}
+function bubbles(x, y, n, color) { for (let i = 0; i < n && bubs.length < 160; i++) bubs.push({ x: x + rnd(-6, 6), y, r: rnd(2, 6), v: rnd(40, 90), s: Math.random() * 6, life: 600, color }); }
+function sparkle(x, y, n) { for (let i = 0; i < n; i++) bubbles(x + rnd(-30, 30), y + rnd(-20, 20), 1, "#ffd23f"); }
+/** A decoration standing on the sand at x. */
+function drawDecor(c, k, x, y, now, mine, alpha = 1, icon = false) {
+  const sway = Math.sin(now / 900 + x) * 0.12;
+  c.save(); c.translate(x, y); c.globalAlpha = alpha;
+  if (k === "plant") { for (let i = -2; i <= 2; i++) { c.strokeStyle = i % 2 ? "#2f9e5a" : "#46c072"; c.lineWidth = 9; c.lineCap = "round"; c.beginPath(); c.moveTo(i * 8, 0); c.quadraticCurveTo(i * 14 + sway * 60, -50, i * 18 + sway * 90, -90 - Math.abs(i) * -8); c.stroke(); } }
+  else if (k === "kelp") { for (let i = 0; i < 3; i++) { c.strokeStyle = ["#3a8a3a", "#5aa64a", "#2f7a3a"][i]; c.lineWidth = 12; c.lineCap = "round"; c.beginPath(); c.moveTo(i * 14 - 14, 0); for (let s = 1; s <= 8; s++) c.lineTo(i * 14 - 14 + Math.sin(now / 800 + s * 0.8 + i) * 12 * (s / 8), -s * 40); c.stroke(); } }
+  else if (k === "castle") {
+    c.fillStyle = "#8f98a8"; c.fillRect(-70, -110, 140, 110); c.fillRect(-95, -150, 50, 150); c.fillRect(45, -150, 50, 150);
+    c.fillStyle = "#a9b2c2"; for (const tx of [-95, 45]) for (let b = 0; b < 3; b++) c.fillRect(tx + b * 18, -166, 12, 16); for (let b = 0; b < 5; b++) c.fillRect(-70 + b * 30, -124, 18, 14);
+    c.fillStyle = "#2b3a52"; c.beginPath(); c.arc(0, -40, 26, Math.PI, 0); c.fillRect(-26, -40, 52, 40); c.fill(); c.fillRect(-78, -120, 14, 22); c.fillRect(62, -120, 14, 22);
+    c.strokeStyle = "#555"; c.lineWidth = 3; c.beginPath(); c.moveTo(70, -166); c.lineTo(70, -205); c.stroke(); c.fillStyle = "#ff5d8f"; c.beginPath(); c.moveTo(70, -205); c.lineTo(70 + 30 + sway * 30, -196); c.lineTo(70, -186); c.fill();
+  }
+  else if (k === "rock") { for (const [rx, ry, r, col] of [[-30, -18, 32, "#7d8691"], [18, -14, 26, "#959eaa"], [0, -42, 22, "#a9b1bb"]]) { c.fillStyle = col; c.beginPath(); c.ellipse(rx, ry, r * 1.2, r, 0, 0, Math.PI * 2); c.fill(); } }
+  else if (k === "chest") { c.fillStyle = "#8a5a32"; c.fillRect(-40, -44, 80, 44); c.fillStyle = "#a0703f"; c.beginPath(); c.moveTo(-42, -44); c.quadraticCurveTo(0, -84 - Math.max(0, Math.sin(now / 1500)) * 14, 42, -44); c.fill(); c.fillStyle = "#ffd23f"; c.fillRect(-6, -52, 12, 16); for (let i = 0; i < 3; i++) { c.fillStyle = "#ffd23f"; c.beginPath(); c.arc(-20 + i * 20, -46, 6, 0, Math.PI * 2); c.fill(); } if (!icon && alpha === 1 && Math.random() < 0.02) bubbles(x, y - 70, 2); }
+  else if (k === "coral") { c.strokeStyle = "#ff7aa8"; c.lineCap = "round"; const br = (bx, by, a, l, w) => { if (l < 12) return; const ex = bx + Math.cos(a) * l, ey = by + Math.sin(a) * l; c.lineWidth = w; c.beginPath(); c.moveTo(bx, by); c.lineTo(ex, ey); c.stroke(); br(ex, ey, a - 0.5, l * 0.7, w * 0.75); br(ex, ey, a + 0.45, l * 0.65, w * 0.75); }; br(0, 0, -Math.PI / 2 + sway * 0.3, 46, 12); }
+  if (mine) { c.globalAlpha = 0.9; c.fillStyle = "#ffd23f"; c.font = "800 16px system-ui"; c.textAlign = "center"; c.fillText("✕ tap to remove", 0, 26); }
+  c.restore();
+}
+
+// ── HUD & PANELS ────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function toast(text) { const t = $("toast"); t.textContent = text; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 2400); }
+function flashSaved() { const tag = $("saved"); tag.classList.add("on"); setTimeout(() => tag.classList.remove("on"), 1600); }
+let dropped = false; // true while the connection is down: the HUD keeps showing "Reconnecting…"
+function hud() {
+  if (ATTRACT) return;
+  const n = livePlayers().length;
+  $("net").textContent = net.offline ? "Offline: playing with bots" : dropped ? "Reconnecting…" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the tank" : ""}`;
+  if (!hasFish()) return;
+  const lv = levelOf(save.xp), lo = CONFIG.levels[lv], hi = CONFIG.levels[lv + 1];
+  $("fishName").textContent = save.look.n;
+  $("growBar").firstElementChild.style.width = hi ? `${((save.xp - lo) / (hi - lo)) * 100}%` : "100%";
+  $("foodBar").firstElementChild.style.width = `${save.hunger}%`;
+  $("stats").textContent = `Size ${lv}${hi ? "" : " (max)"} · ${save.hunger < 25 ? "Hungry! Feed me" : save.hunger < 60 ? "Peckish" : "Full and happy"}`;
+}
+// The fish maker
+const draft = { s: "round", fn: "small", pt: "stripes", c1: COLORS[0], c2: COLORS[8], n: "" };
+function optionRow(id, list, key, label) {
+  const row = $(id); row.innerHTML = "";
+  for (const v of list) {
+    const b = document.createElement("button"); b.className = key.startsWith("c") ? "sw" : "";
+    if (key.startsWith("c")) b.style.background = v; else b.textContent = label ? label(v) : v;
+    b.classList.toggle("on", draft[key] === v); b.setAttribute("aria-label", v);
+    b.onclick = () => { draft[key] = v; for (const o of row.children) o.classList.toggle("on", o === b); paintPreview(); };
+    row.append(b);
+  }
+}
+function paintPreview() { const c = $("preview").getContext("2d"); c.clearRect(0, 0, 320, 170); drawFish(c, draft, 160, 90, 130, 1, performance.now() / 160); }
+function openMaker() {
+  if (save.look) Object.assign(draft, save.look);
+  else if (!draft.n) { // a first fish: a body color nobody in the tank has yet
+    const used = new Set(otherLooks().map((o) => o.l.c1));
+    Object.assign(draft, randomLook(""), { sz: 0, c1: COLORS.find((c) => !used.has(c)) || COLORS[0] });
+  }
+  const cap = (s) => s[0].toUpperCase() + s.slice(1);
+  optionRow("optShape", SHAPES, "s", cap); optionRow("optFin", FINS, "fn", cap); optionRow("optPat", PATS, "pt", cap);
+  optionRow("optC1", COLORS, "c1"); optionRow("optC2", COLORS, "c2");
+  $("nameIn").value = draft.n || ""; $("maker").hidden = false; paintPreview();
+}
+$("randomBtn").onclick = () => { Object.assign(draft, randomLook(draft.n)); openMaker(); };
+$("makeGo").onclick = () => {
+  const name = $("nameIn").value.trim().slice(0, 14) || BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)];
+  const first = !save.look;
+  save.look = { n: name, s: draft.s, fn: draft.fn, pt: draft.pt, c1: draft.c1, c2: draft.c2 };
+  if (!save.u) save.u = Math.random().toString(36).slice(2, 10);
+  publishLook(); saveNow(); $("maker").hidden = true;
+  if (first) { me.x = me.tx = rnd(300, TW - 300); me.y = me.ty = 250; bubbles(me.x, me.y, 12); toast(`Welcome to the tank, ${name}!`); showHint(); }
+};
+// Decorating: pick a piece, tap the sand to place it; tap one of yours to remove it
+function buildDecoBar() {
+  const bar = $("decoBar"); bar.innerHTML = "";
+  for (const [k, label] of Object.entries(DECOR)) {
+    const b = document.createElement("button"), c = document.createElement("canvas"); c.width = c.height = 80; b.append(c); b.title = label; b.setAttribute("aria-label", label);
+    const g = c.getContext("2d"), sc = k === "castle" ? 0.33 : k === "kelp" ? 0.22 : 0.55; // the icon uses the same drawing code as the tank
+    g.translate(40, 76); g.scale(sc, sc); drawDecor(g, k, 0, 0, 0, false, 1, true);
+    b.onclick = () => { me.deco = me.deco === k ? "" : k; for (const o of bar.children) o.classList.toggle("on", o === b && me.deco); toast(me.deco ? `Tap the sand to place the ${label.toLowerCase()}` : "Done decorating"); };
+    bar.append(b);
+  }
+}
+$("decoBtn").onclick = () => { const bar = $("decoBar"); bar.hidden = !bar.hidden; $("decoBtn").classList.toggle("on", !bar.hidden); if (bar.hidden) me.deco = ""; else toast(`Pick a decoration, then tap the sand. You can have ${CONFIG.decoEach} in the tank.`); };
+$("feedBtn").onclick = feed;
+$("tapBtn").onclick = () => tapGlass(me.x + rnd(-120, 120), me.y + rnd(-80, 80));
+$("fishBtn").onclick = openMaker;
+$("topBtn").onclick = () => {
+  $("topPanel").hidden = false; submitScore(true);
+  $("myXp").textContent = hasFish() ? `${save.look.n}: ${save.xp} growth points` : "";
+  const list = $("board");
+  if (!board) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
+  list.innerHTML = "<li>Loading…</li>";
+  board.top(10).then(({ entries }) => { list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score}</span></li>`).join("") : "<li>No fish yet. Yours could be first.</li>"; }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+};
+$("topClose").onclick = () => { $("topPanel").hidden = true; };
+let audio = null;
+function sfx(freq, len) {
+  if (ATTRACT) return;
+  try {
+    audio = audio || new AudioContext();
+    const o = audio.createOscillator(), gn = audio.createGain(), t = audio.currentTime;
+    o.type = "sine"; o.frequency.setValueAtTime(freq, t); o.frequency.exponentialRampToValueAtTime(freq * 1.6, t + len);
+    gn.gain.setValueAtTime(0.07, t); gn.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    o.connect(gn).connect(audio.destination); o.start(t); o.stop(t + len + 0.02);
+  } catch {}
+}
+let hintUntil = 0;
+function showHint() {
+  $("hint").textContent = touchUI ? "Tap where you want to swim · Feed, then swim to the food · Tap glass to scare everyone 😄" : "Click where you want to swim (or WASD) · Feed, then swim to the food · Enter to chat";
+  hintUntil = performance.now() + 12000;
+}
+
+// ── INPUT ───────────────────────────────────────────────────────────────────────────
+const touchUI = matchMedia("(pointer: coarse)").matches;
+const keys = new Set();
+let hoverX = null;
+const typing = () => document.activeElement === $("say") || document.activeElement === $("nameIn");
+cv.addEventListener("pointerdown", (e) => {
+  e.preventDefault(); $("say").blur();
+  const p = toTank(e.clientX, e.clientY);
+  if (me.deco) { // decorating: tap one of mine to remove it, else place here
+    const mineHit = (tank()?.decor || []).find((d) => d[3] === net.sessionId && Math.abs(d[2] - p.x) < 60 && p.y > CONFIG.sandY - 170);
+    const m = mineHit ? { i: mineHit[0] } : { k: me.deco, x: Math.round(p.x) };
+    const type = mineHit ? "undeco" : "deco";
+    if (isHost()) applyIntent(type, m, net.sessionId); else net.send(type, m);
+    sfx(mineHit ? 300 : 600, 0.1); bubbles(p.x, CONFIG.sandY - 20, 6);
+    return;
+  }
+  me.tx = p.x; me.ty = p.y; drag.on = true; drag.id = e.pointerId; try { cv.setPointerCapture(e.pointerId); } catch {}
+});
+const drag = { on: false, id: null };
+cv.addEventListener("pointermove", (e) => {
+  const p = toTank(e.clientX, e.clientY);
+  hoverX = me.deco ? p.x : null;
+  if (drag.on && e.pointerId === drag.id) { me.tx = p.x; me.ty = p.y; }
+});
+for (const ev of ["pointerup", "pointercancel"]) cv.addEventListener(ev, () => { drag.on = false; });
+addEventListener("keydown", (e) => {
+  if (typing()) { if (e.key === "Enter" && document.activeElement === $("say")) { e.preventDefault(); sendChat(); $("say").blur(); } if (e.key === "Escape") document.activeElement.blur(); return; }
+  const k = e.key.toLowerCase();
+  if (k === "enter") { e.preventDefault(); $("say").focus(); return; }
+  if (k === "f") feed(); if (k === "t") tapGlass(me.x + rnd(-120, 120), me.y + rnd(-80, 80));
+  if (k.startsWith("arrow") || k === " ") e.preventDefault();
+  keys.add(k);
+});
+addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+addEventListener("blur", () => keys.clear());
+$("say").addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") $("say").blur(); });
+$("say").addEventListener("keyup", (e) => { if (e.key === "Enter") { sendChat(); } });
+function readKeys() {
+  const x = (keys.has("d") || keys.has("arrowright") ? 1 : 0) - (keys.has("a") || keys.has("arrowleft") ? 1 : 0);
+  const y = (keys.has("s") || keys.has("arrowdown") ? 1 : 0) - (keys.has("w") || keys.has("arrowup") ? 1 : 0);
+  if (x || y) { me.tx = me.x + x * 200; me.ty = me.y + y * 200; me.keyMove = true; }
+  else if (me.keyMove) { me.keyMove = false; me.tx = me.x + me.vx * 0.3; me.ty = me.y + me.vy * 0.3; }
+}
+document.addEventListener("touchmove", (e) => { if (e.target === cv) e.preventDefault(); }, { passive: false });
+
+// ── MAIN LOOP ───────────────────────────────────────────────────────────────────────
+/** Chat from players: a bubble over their fish. */
+function hearChat() {
+  for (const id of livePlayers()) {
+    if (id === net.sessionId) continue;
+    const s = field("say:" + id, S.entities.players[id]?.say, null);
+    if (s && s.k > (heard.get(id) || 0)) { heard.set(id, s.k); said.set(id, { text: String(s.t).slice(0, 60), until: performance.now() + 6000 }); }
+  }
+}
+let last = performance.now(), lastHb = 0, lastHud = 0, lastSaveAt = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const realNow = performance.now(); // timed on the real clock: after a long freeze the rAF time can be from before the wake
+  if (lastFrameAt && realNow - lastFrameAt > 1000) { wakeHold = realNow + 700; host.adopted = false; } lastFrameAt = realNow; // woke from a freeze or a background tab: another player may have run the tank meanwhile, so let their state arrive, then adopt it like a new host
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; // never negative: the first frame can be stamped before `last`
+  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); fixColor(); }
+  if (!typing()) readKeys();
+  if (isHost()) hostTick(dt, now); else host.adopted = false;
+  myTick(dt, Date.now());
+  hearChat();
+  placeCamera(dt);
+  draw(now, dt);
+  if (now - lastHud > 150) { lastHud = now; hud(); }
+  $("hint").style.opacity = performance.now() < hintUntil ? 1 : 0;
+  if (saveDirty && now - lastSaveAt > 8000) { lastSaveAt = now; saveNow(); submitScore(false); }
+}
+
+(async function start() {
+  document.body.classList.toggle("attract", ATTRACT);
+  if (ATTRACT) { $("net").textContent = ""; CONFIG.seats = 11; }
+  net = await connect();
+  net.onState((st) => { S = st; });
+  net.on("feed", (m, from) => { if (isHost()) applyIntent("feed", m, from); });
+  net.on("eat", (m, from) => { if (isHost()) applyIntent("eat", m, from); });
+  net.on("deco", (m, from) => { if (isHost()) applyIntent("deco", m, from); });
+  net.on("undeco", (m, from) => { if (isHost()) applyIntent("undeco", m, from); });
+  net.on("tap", (m) => { if (m && Number.isFinite(m.x) && Number.isFinite(m.y)) onTap(m); });
+  net.on("chat", (m, from) => { if (m && typeof m.t === "string" && (m.k || 0) > (heard.get(from) || 0)) { heard.set(from, m.k || 0); said.set(from, { text: m.t.slice(0, 60), until: performance.now() + 6000 }); } });
+  net.on("memory", (m) => { if (m && typeof m.text === "string") toast(m.text.slice(0, 80)); });
+  net.onDisconnect(() => { dropped = true; $("net").textContent = "Reconnecting…"; });
+  net.onReconnect(() => { dropped = false; });
+  if (!net.offline && typeof MP !== "undefined") { player = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl }); board = player.leaderboard(CONFIG.board); }
+  host.startedAt = performance.now();
+  buildDecoBar();
+  setInterval(memoryTick, 1000);
+  addEventListener("pagehide", () => { saveNow(); submitScore(true); });
+  if (ATTRACT) {
+    memory.ready = true;
+    save.look = { n: "You", s: "tall", fn: "flowy", pt: "stripes", c1: "#ffd23f", c2: "#2b2f45" }; save.xp = 45; save.hunger = 50;
+    me.x = me.tx = 700; me.y = me.ty = 420;
+  } else {
+    loadMemory();
+    const mine = local.get(), cloud = player ? await loadAccountSave() : null;
+    const best = [mine, cloud].filter((s) => s && cleanLook(s.look)).sort((a, b) => (b.xp || 0) - (a.xp || 0))[0];
+    if (!applySave(best)) openMaker(); else { toast(`${save.look.n} missed you! 🐟`); showHint(); }
+    me.x = me.tx = rnd(300, TW - 300); me.y = me.ty = rnd(200, 600);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
