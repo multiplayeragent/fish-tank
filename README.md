@@ -32,7 +32,7 @@ Without a key it still runs, offline with bot fish.
 - **World memory:** Players' browsers keep a copy of the tank (decorations and the fish of people who visited), so it comes back after the room empties.
 - **Saves:** Your fish, its size and how hungry it is are kept for you between visits.
 - **Leaderboard:** Your fish's growth points, all time.
-- **Bots:** Bot fish, and the remembered fish of people who are away, keep the tank lively.
+- **Bots:** Bot fish, and the remembered fish of people who are away, keep the tank lively: they eat and grow, drop food, tap the glass, decorate and chat back.
 - **Host-run rules:** The host's browser drops the food, decides who ate each pellet and places decorations; if it leaves, the next player takes over.
 - **Live sync:** Everyone sees every fish swim, every pellet sink and every chat bubble.
 - `?attract` runs it offline with bot fish only. The preview video is recorded from it.

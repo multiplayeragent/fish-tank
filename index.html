@@ -19,7 +19,7 @@
   #net { top: max(10px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); font-size: 12px; font-weight: 600; text-align: right; max-width: 40vw; }
   #toast { top: 24%; left: 16px; right: 16px; text-align: center; font-size: 19px; font-weight: 800; opacity: 0; transition: opacity .35s; }
   #toast.on { opacity: 1; }
-  #hint { left: 16px; right: 16px; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 120px); text-align: center; font-size: 15px; font-weight: 700; transition: opacity .8s; }
+  #hint { left: 16px; right: 16px; bottom: 132px; /* set above the buttons each frame */ text-align: center; font-size: 15px; font-weight: 700; transition: opacity .8s; }
   #dock { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(10px, env(safe-area-inset-bottom)); width: min(500px, calc(100vw - 20px)); display: grid; gap: 6px; }
   #bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
   #chat { display: flex; gap: 6px; }
@@ -41,6 +41,7 @@
   .go { width: 100%; margin-top: 8px; background: #ff8a3d; color: #fff; box-shadow: none; font-size: 17px; min-height: 48px; }
   .ghost { width: 100%; margin-top: 8px; background: #dceef8; box-shadow: none; }
   .label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #5d7f96; margin-top: 8px; }
+  .card ol li.msg { list-style: none; margin-left: -26px; text-align: center; color: #3d6079; }
   .card ol { text-align: left; margin: 12px 0; padding-left: 26px; font-size: 14px; min-height: 40px; } .card li span { float: right; }
   [hidden] { display: none !important; }
   .attract .hud, .attract #dock { display: none !important; }
@@ -77,7 +78,7 @@
   <button class="go" id="makeGo">Into the tank!</button>
 </div></div>
 <div class="panel" id="topPanel" hidden><div class="card">
-  <h2>Biggest fish</h2><p>Growth points, all time</p><ol id="board"><li>Loading…</li></ol><p id="myXp"></p>
+  <h2>Biggest fish</h2><p>Growth points, all time</p><ol id="board"><li class="msg">Loading…</li></ol><p id="myXp"></p>
   <button class="go" id="topClose">Back to the tank</button>
 </div></div>
 <script>
@@ -88,7 +89,8 @@
  *   CONFIG ........ tank size, speeds, food, growth, decorations, bots
  *   CONNECTION .... MP_CONNECT, joining, the offline room, who is host
  *   WORLD MEMORY .. how the tank survives the room emptying (same code in every starter)
- *   TANK (HOST) ... decorations, food, remembered fish and bot fish. Only the host writes these.
+ *   TANK (HOST) ... decorations, food, remembered fish and bot fish (they eat and grow, feed, tap the
+ *                   glass, decorate and answer chat). Only the host writes these.
  *   FISH LOOKS .... the parts a fish is made of, and drawing any fish
  *   MY FISH ....... swimming, eating, growing, hunger, chat; your fish save
  *   DRAW .......... camera, water, sand, light, decorations, food, fish, bubbles
@@ -133,6 +135,11 @@ const CONFIG = {
   decoMax: 16,            // decorations in the tank at once
   remember: 8,            // fish the tank remembers (people who visited)
   botNotice: 230,         // bot fish only go for food below this depth (people get first go at the top)
+  botFeedEvery: [20000, 40000], // ms between a bot fish dropping food
+  botTapEvery: [70000, 130000], // ms between a bot fish tapping the glass
+  botDecoEvery: [40000, 80000], // ms between a bot fish placing (or moving) one of the bots' decorations
+  botMaxSize: 7,          // made-up bot fish grow by eating, up to this size
+  botReply: 0.6,          // chance a bot fish says something back when someone chats
   board: "fish-growth",   // leaderboard name
   saveNs: "fish-tank",    // world-memory save namespace
   fishNs: "fish-tank-fish", // your fish's save namespace
@@ -143,6 +150,7 @@ const COLORS = ["#ff8a3d", "#ffd23f", "#ff5d8f", "#4da6ff", "#52d273", "#c77dff"
 const DECOR = { plant: "Plant", kelp: "Kelp", castle: "Castle", rock: "Rocks", chest: "Treasure", coral: "Coral" };
 const BOT_NAMES = ["Bubbles", "Finn", "Coral", "Nemo-ish", "Sushi", "Blue", "Goldie", "Squirt", "Pebble", "Ziggy"];
 const BOT_LINES = ["blub!", "🫧", "Food?", "Hi friend!", "Nice castle!", "So shiny ✨", "I love this tank", "Wheee!", "🐟💕", "zzz…"];
+const BOT_FEED_LINES = ["Snack time! 🍤", "Who's hungry?", "Dinner's up!"], BOT_DECO_LINES = ["Look what I found!", "This goes here ✨", "Redecorating!"];
 
 // ── CONNECTION ──────────────────────────────────────────────────────────────────────
 // The builder fills these in for this game. Downloaded from GitHub? Put your own pk_ key here.
@@ -355,7 +363,7 @@ function applyIntent(type, m, from) {
     const x = Math.max(40, Math.min(TW - 40, Math.round(+m.x || TW / 2))), d = host.tank.decor;
     const mine = d.filter((q) => q[3] === from);
     if (mine.length >= CONFIG.decoEach) d.splice(d.indexOf(mine[0]), 1); // your oldest makes room
-    if (d.length >= CONFIG.decoMax) d.shift(); // the tank is full: the oldest goes
+    if (d.length >= CONFIG.decoMax) { if (from === "bot") return; d.shift(); } // the tank is full: the oldest goes (bots never push out people's)
     d.push([host.nextId++, m.k, x, from]);
     if (from !== "bot") { host.tank.rev++; }
     host.dirtyT = true;
@@ -421,6 +429,7 @@ function botsTick(dt, t) {
     host.bots.set(id, newBot(id, look, rnd(100, TW - 100), rnd(150, CONFIG.sandY - 120)));
   }
   while (host.bots.size > want) { const [id] = [...host.bots.keys()].reverse(); host.bots.delete(id); }
+  botActions(t);
   const list = host.food.list;
   for (const b of host.bots.values()) {
     const len = fishLen(b.look.sz);
@@ -428,6 +437,7 @@ function botsTick(dt, t) {
     let target = null, bd = 380;
     for (const f of list) { const p = pelletPos(f, t); const d = Math.hypot(p.x - b.x, p.y - b.y); if (d < bd && p.y > CONFIG.botNotice) { bd = d; target = p; } } // bots only notice food once it has sunk a little
     if (target) { b.tx = target.x; b.ty = target.y; }
+    else if (b.job && t > b.dartUntil) { b.tx = b.job.x; b.ty = CONFIG.sandY - 50; if (Math.hypot(b.tx - b.x, b.ty - b.y) < 40) { applyIntent("deco", { k: b.job.k, x: b.job.x }, "bot"); botSay(b, pick(BOT_DECO_LINES), t); bubbles(b.job.x, CONFIG.sandY - 20, 6); b.job = null; } } // swim down and place it
     else if (t > b.nextAt || Math.hypot(b.tx - b.x, b.ty - b.y) < 20) {
       b.nextAt = t + rnd(2500, 6000);
       const d = host.tank.decor;
@@ -435,9 +445,32 @@ function botsTick(dt, t) {
       else { b.tx = rnd(80, TW - 80); b.ty = rnd(110, CONFIG.sandY - 60); }
     }
     swim(b, b.tx, b.ty, dt, t < b.dartUntil ? 2.2 : target ? 0.85 : 0.5);
-    for (let i = list.length - 1; i >= 0; i--) { const p = pelletPos(list[i], t); if (t >= list[i][2] && Math.hypot(p.x - b.x, p.y - b.y) < CONFIG.eatReach + len * 0.2) { host.food.got.push([list[i][0], b.id]); list.splice(i, 1); host.dirtyF = true; if (host.food.got.length > 12) host.food.got.shift(); } }
+    for (let i = list.length - 1; i >= 0; i--) { const p = pelletPos(list[i], t); if (t >= list[i][2] && Math.hypot(p.x - b.x, p.y - b.y) < CONFIG.eatReach + len * 0.2) { host.food.got.push([list[i][0], b.id]); list.splice(i, 1); host.dirtyF = true; if (host.food.got.length > 12) host.food.got.shift(); botGrow(b); } }
     if (performance.now() > b.sayAt) { b.sayAt = performance.now() + rnd(9000, 22000); b.say = pick(BOT_LINES); b.sayUntil = t + 3500; }
   }
+}
+/** Bot fish do what players do, now and then: drop food, tap the glass, place a decoration (?attract has its own feeding and tapping). */
+function botActions(t) {
+  const list = [...host.bots.values()];
+  if (!list.length || ATTRACT) return;
+  if (!host.botFeedAt) { host.botFeedAt = t + rnd(6000, 12000); host.botTapAt = t + rnd(...CONFIG.botTapEvery); host.botDecoAt = t + rnd(15000, 30000); }
+  if (t > host.botFeedAt) { host.botFeedAt = t + rnd(...CONFIG.botFeedEvery); const b = pick(list); applyIntent("feed", { x: Math.round(b.x + rnd(-60, 60)) }, b.id); botSay(b, pick(BOT_FEED_LINES), t); }
+  if (t > host.botTapAt) { host.botTapAt = t + rnd(...CONFIG.botTapEvery); const b = pick(list); tapGlass(b.x + b.f * 60, b.y + rnd(-40, 40)); }
+  if (t > host.botDecoAt) { host.botDecoAt = t + rnd(...CONFIG.botDecoEvery); const b = pick(list); if (!b.job) b.job = { k: pick(Object.keys(DECOR)), x: Math.round(rnd(80, TW - 80)) }; }
+}
+function botSay(b, text, t) { b.say = text; b.sayUntil = t + 3500; b.sayAt = performance.now() + rnd(9000, 22000); }
+/** A made-up bot fish grows as it eats, like a player's (remembered fish keep their owner's size). */
+function botGrow(b) {
+  if (b.u) return;
+  b.xp = (b.xp ?? CONFIG.levels[b.look.sz] ?? 0) + 1;
+  const lv = Math.min(CONFIG.botMaxSize, levelOf(b.xp));
+  if (lv > b.look.sz) { b.look = { ...b.look, sz: lv }; sparkle(b.x, b.y, 8); }
+}
+/** Someone chatted: a bot fish may say something back in a moment. */
+function botReply() {
+  if (!hosting() || Math.random() > CONFIG.botReply) return;
+  const quiet = [...host.bots.values()].filter((b) => b.sayUntil < Date.now());
+  if (quiet.length) pick(quiet).sayAt = performance.now() + rnd(900, 2200);
 }
 /** Swim toward (tx, ty): ease the velocity, face where you're going, stay in the water. */
 function swim(f, tx, ty, dt, pace) {
@@ -560,7 +593,7 @@ function myTick(dt, t) {
   const len = fishLen(levelOf(save.xp)), hungry = save.hunger < 25;
   if (ATTRACT) { // the preview: chase food, else wander
     let best = null, bd = 1e9;
-    for (const f of food().list) { if (t < f[2]) continue; const p = pelletPos(f, t), d = Math.hypot(p.x - me.x, p.y - me.y); if (d < bd) { bd = d; best = p; } }
+    for (const f of food().list) { if (t < f[2]) continue; const p = pelletPos(f, t), d = Math.hypot(p.x - me.x, p.y - me.y); if (d < bd && d < 380 && p.y > CONFIG.botNotice) { bd = d; best = p; } } // same rules as the bot fish
     if (best) { me.tx = best.x; me.ty = best.y; } else if (t > me.nextAt) { me.nextAt = t + 3000; me.tx = rnd(200, TW - 200); me.ty = rnd(150, 700); }
   }
   swim(me, me.tx, me.ty, dt, (t < me.dartUntil ? 2.2 : 1) * (hungry ? 0.7 : 1));
@@ -600,9 +633,10 @@ function onTap(m) {
 }
 function sendChat() {
   const input = $("say"), text = input.value.trim().slice(0, 60), now = performance.now();
+  if (!hasFish() || now - me.lastSay < 900) return; // too fast: the message stays in the box
   input.value = "";
-  if (!text || now - me.lastSay < 900 || !hasFish()) return;
-  me.lastSay = now; me.sayK++;
+  if (!text) return;
+  me.lastSay = now; me.sayK++; botReply();
   net.send("chat", { t: text, k: me.sayK }); net.me.set("say", JSON.stringify({ t: text, k: me.sayK }));
   heard.set(net.sessionId, me.sayK); said.set(net.sessionId, { text, until: performance.now() + 6000 });
 }
@@ -616,9 +650,10 @@ const cam = { x: TW / 2, y: TH / 2, z: 1, cy: 300 }; // cy: the screen row the c
 const said = new Map(), heard = new Map(), floats = [], ripples = [], bubs = [], shown = new Map();
 /** Fit the tank's height (a wide screen sees all of it); on a narrow screen follow my fish sideways. */
 function placeCamera(dt) {
-  const room = H - (ATTRACT ? 0 : 118); // keep the tank above the buttons
-  cam.z = W < H ? room / (TH + 40) : Math.min(W / TW, room / TH) * (ATTRACT ? 1.06 : 1); // a tall phone sees a slice of the tank (full height) and follows its fish
-  cam.cy = room / 2;
+  const dockTop = ATTRACT ? H : $("dock").getBoundingClientRect().top, room = Math.max(160, dockTop - 6); // keep the tank above the buttons (and the decorate bar)
+  $("hint").style.bottom = H - dockTop + 10 + "px";
+  const z = W < H ? room / (TH + 40) : Math.min(W / TW, room / TH) * (ATTRACT ? 1.06 : 1), kz = cam.ready ? 1 - Math.pow(0.001, dt) : 1; // a tall phone sees a slice of the tank (full height) and follows its fish
+  cam.z += (z - cam.z) * kz; cam.cy += (room / 2 - cam.cy) * kz; cam.ready = true; // eased: opening the decorate bar doesn't jump
   const viewW = W / cam.z, viewH = room / cam.z, k = 1 - Math.pow(0.05, dt);
   const fx = ATTRACT ? TW / 2 : me.x, fy = ATTRACT ? TH : me.y; // the preview shows the whole tank down to the sand
   const tx = viewW >= TW ? TW / 2 : Math.max(viewW / 2, Math.min(TW - viewW / 2, fx)), ty = viewH >= TH ? TH / 2 : Math.max(viewH / 2, Math.min(TH - viewH / 2, fy));
@@ -677,9 +712,26 @@ function draw(now, dt) {
     const len = fishLen(q.look.sz), [sx, fy] = toScreen(q.x, q.y), sy = fy - len * 0.55 * cam.z - 10;
     if (!ATTRACT) { const tag = (q.look.n || "Fish") + (q.look.o && !q.mine && !q.bot ? ` · ${q.look.o}` : ""); ctx.font = "700 12px system-ui, sans-serif"; ctx.lineWidth = 3; ctx.strokeStyle = "#0009"; ctx.strokeText(tag, sx, sy); ctx.fillStyle = q.mine ? "#ffd23f" : q.mem ? "#cfe9ff" : "#fff"; ctx.fillText(tag, sx, sy); }
     const s = q.bot ? q.s : said.get(q.id) && said.get(q.id).until > performance.now() ? said.get(q.id).text : "";
-    if (s) { ctx.font = "600 14px system-ui, sans-serif"; const w = Math.min(220, ctx.measureText(s).width + 18), y = sy - 40; ctx.fillStyle = "#fff"; roundRect(sx - w / 2, y, w, 24, 12); ctx.fill(); ctx.beginPath(); ctx.moveTo(sx - 5, y + 23); ctx.lineTo(sx + 5, y + 23); ctx.lineTo(sx, y + 30); ctx.fill(); ctx.fillStyle = "#12324a"; ctx.fillText(s, sx, y + 17, 204); }
+    if (s) {
+      ctx.font = "600 14px system-ui, sans-serif";
+      const lines = wrapText(s, 200), w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 18, h = 8 + lines.length * 18, y = sy - 16 - h;
+      const bx = Math.max(6, Math.min(W - w - 6, sx - w / 2)), tx = Math.max(bx + 12, Math.min(bx + w - 12, sx)); // the bubble stays on screen, its tail points at the fish
+      ctx.fillStyle = "#fff"; roundRect(bx, y, w, h, 12); ctx.fill(); ctx.beginPath(); ctx.moveTo(tx - 5, y + h - 1); ctx.lineTo(tx + 5, y + h - 1); ctx.lineTo(tx, y + h + 6); ctx.fill();
+      ctx.fillStyle = "#12324a"; lines.forEach((l, i) => ctx.fillText(l, bx + w / 2, y + 17 + i * 18));
+    }
   }
   for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i], k = (now - f.t0) / 1000; if (k > 1) { floats.splice(i, 1); continue; } const [sx, fy] = toScreen(f.x, f.y), sy = fy - k * 30; ctx.globalAlpha = 1 - k; ctx.font = "900 18px system-ui, sans-serif"; ctx.fillStyle = "#ffd23f"; ctx.fillText(f.text, sx, sy); ctx.globalAlpha = 1; }
+}
+/** A chat line broken into lines no wider than maxW (3 at most), with the current font. */
+function wrapText(text, maxW) {
+  const lines = [""];
+  for (const word of String(text).split(/\s+/)) {
+    const tryL = lines[lines.length - 1] ? lines[lines.length - 1] + " " + word : word;
+    if (ctx.measureText(tryL).width > maxW && lines[lines.length - 1]) lines.push(word); else lines[lines.length - 1] = tryL;
+  }
+  for (let i = 0; i < lines.length; i++) while (ctx.measureText(lines[i]).width > maxW && lines[i].length > 1) lines[i] = lines[i].slice(0, -1); // one very long word
+  if (lines.length > 3) { lines.length = 3; lines[2] += "…"; }
+  return lines;
 }
 function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 const botView = () => { const looks = new Map(shared("botLooks", []).map(([i, l]) => [i, l])); return shared("bots", []).filter((b) => cleanLook(looks.get(b.i))).map((b) => ({ id: b.i, x: b.x, y: b.y, f: b.f, look: looks.get(b.i), s: b.s, mem: !!looks.get(b.i).u })); };
@@ -779,9 +831,9 @@ $("topBtn").onclick = () => {
   $("topPanel").hidden = false; submitScore(true);
   $("myXp").textContent = hasFish() ? `${save.look.n}: ${save.xp} growth points` : "";
   const list = $("board");
-  if (!board) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
-  list.innerHTML = "<li>Loading…</li>";
-  board.top(10).then(({ entries }) => { list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score}</span></li>`).join("") : "<li>No fish yet. Yours could be first.</li>"; }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+  if (!board) { list.innerHTML = '<li class="msg">Leaderboards need a connection.</li>'; return; }
+  list.innerHTML = '<li class="msg">Loading…</li>';
+  board.top(10).then(({ entries }) => { list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score}</span></li>`).join("") : '<li class="msg">No fish yet. Yours could be first.</li>'; }).catch(() => { list.innerHTML = '<li class="msg">Couldn\'t load the leaderboard.</li>'; });
 };
 $("topClose").onclick = () => { $("topPanel").hidden = true; };
 let audio = null;
@@ -826,18 +878,23 @@ cv.addEventListener("pointermove", (e) => {
   if (drag.on && e.pointerId === drag.id) { me.tx = p.x; me.ty = p.y; }
 });
 for (const ev of ["pointerup", "pointercancel"]) cv.addEventListener(ev, () => { drag.on = false; });
+cv.addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("keydown", (e) => {
   if (typing()) { if (e.key === "Enter" && document.activeElement === $("say")) { e.preventDefault(); sendChat(); $("say").blur(); } if (e.key === "Escape") document.activeElement.blur(); return; }
   const k = e.key.toLowerCase();
-  if (k === "enter") { e.preventDefault(); $("say").focus(); return; }
+  if (k === "enter") { e.preventDefault(); if ($("maker").hidden && $("topPanel").hidden) $("say").focus(); return; }
   if (k === "f") feed(); if (k === "t") tapGlass(me.x + rnd(-120, 120), me.y + rnd(-80, 80));
   if (k.startsWith("arrow") || k === " ") e.preventDefault();
   keys.add(k);
 });
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 addEventListener("blur", () => keys.clear());
-$("say").addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") $("say").blur(); });
-$("say").addEventListener("keyup", (e) => { if (e.key === "Enter") { sendChat(); } });
+$("say").addEventListener("keydown", (e) => { // chat keys never reach the game
+  e.stopPropagation();
+  if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); sendChat(); if (!touchUI && !$("say").value) $("say").blur(); } // desktop: back to swimming; phone: keep the keyboard up
+  if (e.key === "Escape") $("say").blur();
+});
+$("nameIn").addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); $("nameIn").blur(); $("makeGo").click(); } });
 function readKeys() {
   const x = (keys.has("d") || keys.has("arrowright") ? 1 : 0) - (keys.has("a") || keys.has("arrowleft") ? 1 : 0);
   const y = (keys.has("s") || keys.has("arrowdown") ? 1 : 0) - (keys.has("w") || keys.has("arrowup") ? 1 : 0);
@@ -883,7 +940,7 @@ function frame(now) {
   net.on("deco", (m, from) => { if (isHost()) applyIntent("deco", m, from); });
   net.on("undeco", (m, from) => { if (isHost()) applyIntent("undeco", m, from); });
   net.on("tap", (m) => { if (m && Number.isFinite(m.x) && Number.isFinite(m.y)) onTap(m); });
-  net.on("chat", (m, from) => { if (m && typeof m.t === "string" && (m.k || 0) > (heard.get(from) || 0)) { heard.set(from, m.k || 0); said.set(from, { text: m.t.slice(0, 60), until: performance.now() + 6000 }); } });
+  net.on("chat", (m, from) => { if (m && typeof m.t === "string" && (m.k || 0) > (heard.get(from) || 0)) { heard.set(from, m.k || 0); said.set(from, { text: m.t.slice(0, 60), until: performance.now() + 6000 }); botReply(); } });
   net.on("memory", (m) => { if (m && typeof m.text === "string") toast(m.text.slice(0, 80)); });
   net.onDisconnect(() => { dropped = true; $("net").textContent = "Reconnecting…"; });
   net.onReconnect(() => { dropped = false; });
